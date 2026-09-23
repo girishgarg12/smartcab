@@ -121,14 +121,11 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             return Optional.empty();
         }
 
-        // Generate all k! permutations of passenger pickup orders
         List<List<Booking>> permutations = new ArrayList<>();
         generatePermutations(new ArrayList<>(bookings), 0, permutations);
 
-        // Office arrival must be at or before shiftStartTime
         LocalDateTime officeEta = shiftStartTime;
 
-        // Phase 1: Try finding a valid route WITHOUT an escort guard (hasEscortGuard = false)
         OptimizedRoute bestRouteWithoutGuard = findBestRoute(
                 permutations, office, officeEta, shiftStartTime,
                 maxRideTimeMinutes, averageSpeedKmh, cabCapacity, false
@@ -138,8 +135,6 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             return Optional.of(bestRouteWithoutGuard);
         }
 
-        // Phase 2: If no safe/valid unescorted ordering exists, try with an escort guard
-        // First check if guard can physically fit (k passengers + 1 guard <= cabCapacity)
         if (k + 1 <= cabCapacity) {
             OptimizedRoute bestRouteWithGuard = findBestRoute(
                     permutations, office, officeEta, shiftStartTime,
@@ -150,7 +145,6 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             }
         }
 
-        // No safe or valid route could be constructed
         return Optional.empty();
     }
 
@@ -203,7 +197,6 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         int k = permutation.size();
         double[] legDistancesKm = new double[k];
 
-        // 1. Calculate leg distances
         for (int i = 0; i < k - 1; i++) {
             Booking from = permutation.get(i);
             Booking to = permutation.get(i + 1);
@@ -213,20 +206,17 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             );
         }
 
-        // Final leg from last passenger to the office
         Booking lastBooking = permutation.get(k - 1);
         legDistancesKm[k - 1] = distanceCalculator.calculateDistanceKm(
                 lastBooking.getPickupLatitude(), lastBooking.getPickupLongitude(),
                 office.getLatitude(), office.getLongitude()
         );
 
-        // Total route distance
         double totalDistanceKm = 0.0;
         for (double leg : legDistancesKm) {
             totalDistanceKm += leg;
         }
 
-        // 2. Compute travel durations and working-backward pickup ETAs
         long[] legDurationsSeconds = new long[k];
         for (int i = 0; i < k; i++) {
             double hours = legDistancesKm[i] / averageSpeedKmh;
@@ -256,7 +246,6 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             ));
         }
 
-        // 3. Validate against all registered route constraints
         RouteCandidate candidate = new RouteCandidate(
                 permutation,
                 stops,

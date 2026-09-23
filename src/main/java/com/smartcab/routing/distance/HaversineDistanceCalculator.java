@@ -41,7 +41,6 @@ public class HaversineDistanceCalculator implements DistanceCalculator {
         validateCoordinates(lat1, lon1);
         validateCoordinates(lat2, lon2);
 
-        // Immediate shortcut for identical coordinates
         if (Double.compare(lat1, lat2) == 0 && Double.compare(lon1, lon2) == 0) {
             return 0.0;
         }
@@ -52,12 +51,10 @@ public class HaversineDistanceCalculator implements DistanceCalculator {
         double radLat1 = Math.toRadians(lat1);
         double radLat2 = Math.toRadians(lat2);
 
-        // Haversine formula
         double a = Math.sin(deltaLat / 2.0) * Math.sin(deltaLat / 2.0)
                 + Math.cos(radLat1) * Math.cos(radLat2)
                 * Math.sin(deltaLon / 2.0) * Math.sin(deltaLon / 2.0);
 
-        // Clamp 'a' between 0 and 1 to prevent potential floating-point inaccuracies
         a = Math.min(1.0, Math.max(0.0, a));
 
         double c = 2.0 * Math.atan2(Math.sqrt(a), Math.sqrt(1.0 - a));

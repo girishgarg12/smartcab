@@ -54,8 +54,8 @@ import java.util.List;
 public class NightSafetyConstraint implements RouteConstraint {
 
     public static final String NAME = "NightSafetyConstraint";
-    public static final LocalTime DEFAULT_NIGHT_START = LocalTime.of(20, 0); // 8:00 PM
-    public static final LocalTime DEFAULT_NIGHT_END = LocalTime.of(6, 0);   // 6:00 AM
+    public static final LocalTime DEFAULT_NIGHT_START = LocalTime.of(20, 0);
+    public static final LocalTime DEFAULT_NIGHT_END = LocalTime.of(6, 0);
 
     private final LocalTime nightStart;
     private final LocalTime nightEnd;
@@ -88,7 +88,6 @@ public class NightSafetyConstraint implements RouteConstraint {
             return ConstraintValidationResult.invalid(NAME, "Candidate must not be null");
         }
 
-        // If an escort guard is on board, the employee is never alone with the driver
         if (candidate.hasEscortGuard()) {
             return ConstraintValidationResult.valid(NAME);
         }
@@ -101,7 +100,6 @@ public class NightSafetyConstraint implements RouteConstraint {
         OptimizedStop firstStop = stops.get(0);
         Booking firstBooking = firstStop.booking();
 
-        // Check if the trip window falls within configured night hours
         boolean isNight = isNightTime(firstStop.pickupEta().toLocalTime())
                 || (candidate.shiftStartTime() != null && isNightTime(candidate.shiftStartTime().toLocalTime()));
 
@@ -109,7 +107,6 @@ public class NightSafetyConstraint implements RouteConstraint {
             return ConstraintValidationResult.valid(NAME);
         }
 
-        // Enforce: Woman employee must not be the first pickup alone during night hours
         if (firstBooking != null && firstBooking.getUser() != null
                 && firstBooking.getUser().getGender() == Gender.FEMALE) {
             String userName = firstBooking.getUser().getName() != null
@@ -140,10 +137,8 @@ public class NightSafetyConstraint implements RouteConstraint {
         }
 
         if (nightStart.isAfter(nightEnd)) {
-            // Window spans midnight (e.g., 20:00 to 06:00)
             return !time.isBefore(nightStart) || !time.isAfter(nightEnd);
         } else {
-            // Window within same calendar day (e.g., 22:00 to 23:59)
             return !time.isBefore(nightStart) && !time.isAfter(nightEnd);
         }
     }

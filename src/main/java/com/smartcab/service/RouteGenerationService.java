@@ -65,7 +65,6 @@ public class RouteGenerationService {
                 ? request.getCabCapacity() : DEFAULT_CAB_CAPACITY;
         boolean forceRegenerate = request != null && Boolean.TRUE.equals(request.getForceRegenerate());
 
-        // 1. Find active bookings (do not regenerate ASSIGNED bookings unless explicitly requested)
         List<Booking> candidateBookings;
         if (forceRegenerate) {
             candidateBookings = bookingRepository.findByStatusIn(List.of(BookingStatus.BOOKED, BookingStatus.ASSIGNED));
@@ -91,11 +90,9 @@ public class RouteGenerationService {
             return Collections.emptyList();
         }
 
-        // Group active bookings by (Office, ShiftStartTime)
         Map<OfficeShiftKey, List<Booking>> grouped = candidateBookings.stream()
                 .collect(Collectors.groupingBy(b -> new OfficeShiftKey(b.getOffice().getId(), b.getShiftStartTime())));
 
-        // 2. Fetch available cabs
         List<Cab> availableCabs = new ArrayList<>(cabRepository.findByStatus(CabStatus.AVAILABLE));
         log.info("Found {} available cabs for {} booking groups", availableCabs.size(), grouped.size());
 
@@ -110,7 +107,6 @@ public class RouteGenerationService {
             Office office = groupBookings.get(0).getOffice();
             LocalDateTime shiftStartTime = entry.getKey().shiftStartTime();
 
-            // 3. Cluster bookings into cab-sized groups using EmployeeClusterer
             List<List<Booking>> clusters = employeeClusterer.clusterBookings(
                     groupBookings, targetCabCapacity, maxDetourKm
             );
@@ -128,7 +124,6 @@ public class RouteGenerationService {
                     break;
                 }
 
-                // 4. Assign available cab with sufficient capacity
                 Optional<Cab> matchingCabOpt = availableCabs.stream()
                         .filter(cab -> cab.getCapacity() >= cluster.size())
                         .findFirst();
@@ -140,7 +135,6 @@ public class RouteGenerationService {
 
                 Cab cab = matchingCabOpt.get();
 
-                // 5. Optimize pickup route and validate constraints (capacity, max ride time, arrival, night safety)
                 Optional<OptimizedRoute> optimizedRouteOpt = routeOptimizer.optimizeRoute(
                         cluster,
                         office,
@@ -158,12 +152,10 @@ public class RouteGenerationService {
 
                 OptimizedRoute optimizedRoute = optimizedRouteOpt.get();
 
-                // Successfully formed route: consume cab and persist atomically
                 availableCabs.remove(cab);
                 cab.setStatus(CabStatus.ASSIGNED);
                 cabRepository.save(cab);
 
-                // 6. Persist Route
                 Route route = Route.builder()
                         .cab(cab)
                         .office(office)
@@ -174,7 +166,6 @@ public class RouteGenerationService {
                         .build();
                 route = routeRepository.save(route);
 
-                // 7. Persist RouteStops & Update Bookings to ASSIGNED
                 List<RouteStopResponse> stopResponses = new ArrayList<>();
                 for (OptimizedStop stop : optimizedRoute.stops()) {
                     Booking booking = stop.booking();
@@ -196,7 +187,6 @@ public class RouteGenerationService {
                     stopResponses.add(mapToStopResponse(routeStop, stop));
                 }
 
-                // 8. Add route summary to output
                 generatedRoutes.add(mapToRouteResponse(route, stopResponses, optimizedRoute.requiresEscortGuard()));
             }
         }

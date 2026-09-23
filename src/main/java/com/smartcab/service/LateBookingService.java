@@ -72,7 +72,6 @@ public class LateBookingService {
             return LateBookingInsertionResult.rejected(bookingId, "Booking is not associated with an office");
         }
 
-        // 1. Find existing confirmed routes serving the same office and shift
         List<Route> existingRoutes = routeRepository.findByOfficeIdAndShiftStartTimeAndStatus(
                 office.getId(), booking.getShiftStartTime(), RouteStatus.CONFIRMED
         );
@@ -85,7 +84,6 @@ public class LateBookingService {
             );
         }
 
-        // 2. Map routes to their current stops and filter for cabs with available seats
         List<RouteCandidateRecord> candidatesWithSeats = new ArrayList<>();
         boolean anyRoutesFound = false;
 
@@ -116,12 +114,10 @@ public class LateBookingService {
             );
         }
 
-        // 3. Sort candidates deterministically: closest route first, tie-break by Route ID
         candidatesWithSeats.sort(Comparator
                 .comparingDouble(RouteCandidateRecord::minDistanceToRoute)
                 .thenComparing(c -> c.route().getId()));
 
-        // 4. Try re-optimizing candidate routes in sorted order
         for (RouteCandidateRecord candidate : candidatesWithSeats) {
             Route route = candidate.route();
             List<RouteStop> currentStops = candidate.stops();
@@ -143,7 +139,6 @@ public class LateBookingService {
                 log.info("Successfully inserted late booking {} into route {} (cab {})",
                         booking.getId(), route.getId(), route.getCab().getVehicleNumber());
 
-                // 5. Update only this route (do not touch unrelated cabs)
                 route.setTotalDistance(optimized.totalDistanceKm());
                 route.setEstimatedArrivalTime(optimized.officeEta());
                 route = routeRepository.save(route);
@@ -179,7 +174,6 @@ public class LateBookingService {
             }
         }
 
-        // 6. If no candidate cab could accept without violating constraints
         return LateBookingInsertionResult.rejected(
                 bookingId,
                 "No existing cab could accept the booking without violating hard constraints (maximum ride time or night safety rules)"

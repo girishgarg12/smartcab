@@ -52,7 +52,6 @@ public class RouteReplanningService {
             return Optional.empty();
         }
 
-        // 1. Find the RouteStop for this booking
         Optional<RouteStop> stopOpt = routeStopRepository.findByBookingId(cancelledBooking.getId());
         if (stopOpt.isEmpty()) {
             log.info("Cancelled booking {} was not assigned to any route; no route replanning needed", cancelledBooking.getId());
@@ -63,19 +62,15 @@ public class RouteReplanningService {
         Route route = cancelledStop.getRoute();
         Cab cab = route.getCab();
 
-        // 2. Fetch all current stops for this cab route
         List<RouteStop> allStops = routeStopRepository.findByRouteIdOrderBySequenceAsc(route.getId());
 
-        // 3. Filter remaining bookings
         List<Booking> remainingBookings = allStops.stream()
                 .filter(s -> !s.getBooking().getId().equals(cancelledBooking.getId()))
                 .map(RouteStop::getBooking)
                 .toList();
 
-        // Delete all old stops for this route
         routeStopRepository.deleteAll(allStops);
 
-        // 4. If no employees remain on this route, cancel the route and release the cab
         if (remainingBookings.isEmpty()) {
             log.info("No passengers remaining on route {}. Marking route CANCELLED and releasing cab {}",
                     route.getId(), cab.getVehicleNumber());
@@ -88,7 +83,6 @@ public class RouteReplanningService {
             return Optional.empty();
         }
 
-        // 5. Recalculate route for remaining employees on this cab only
         log.info("Recalculating route {} for {} remaining passenger(s) in cab {}",
                 route.getId(), remainingBookings.size(), cab.getVehicleNumber());
 
@@ -101,7 +95,6 @@ public class RouteReplanningService {
                 cab.getCapacity()
         );
 
-        // 6. Revalidate constraints: if replanning fails constraints, throw exception to trigger rollback
         if (optRoute.isEmpty()) {
             log.error("Route replanning failed for route {}: remaining passengers violate route constraints", route.getId());
             throw new com.smartcab.exception.InvalidRouteException(
@@ -111,12 +104,10 @@ public class RouteReplanningService {
 
         OptimizedRoute optimized = optRoute.get();
 
-        // 7. Persist updated route attributes
         route.setTotalDistance(optimized.totalDistanceKm());
         route.setEstimatedArrivalTime(optimized.officeEta());
         route = routeRepository.save(route);
 
-        // 8. Persist new RouteStop records with updated ETAs and sequences
         List<RouteStopResponse> stopResponses = new ArrayList<>();
         for (OptimizedStop newStop : optimized.stops()) {
             RouteStop rs = RouteStop.builder()

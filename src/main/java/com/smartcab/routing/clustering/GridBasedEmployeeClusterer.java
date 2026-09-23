@@ -76,7 +76,6 @@ public class GridBasedEmployeeClusterer implements EmployeeClusterer {
             throw new IllegalArgumentException("Maximum detour distance must be non-negative. Found: " + maxDetourKm);
         }
 
-        // 1. Sort bookings deterministically by ID or coordinates
         List<Booking> sortedBookings = new ArrayList<>(bookings);
         sortedBookings.sort(Comparator.comparing(
                 (Booking b) -> b.getId() != null ? b.getId() : 0L
@@ -86,7 +85,6 @@ public class GridBasedEmployeeClusterer implements EmployeeClusterer {
                 b -> b.getPickupLongitude() != null ? b.getPickupLongitude() : 0.0
         ));
 
-        // 2. Build spatial grid index scaled to maxDetourKm
         double cellSizeKm = Math.max(1.0, maxDetourKm);
         GridSpatialIndex spatialIndex = GridSpatialIndex.fromCellSizeKm(cellSizeKm);
         for (Booking booking : sortedBookings) {
@@ -97,7 +95,6 @@ public class GridBasedEmployeeClusterer implements EmployeeClusterer {
         Set<Booking> assignedInstances = new HashSet<>();
         List<List<Booking>> clusters = new ArrayList<>();
 
-        // 3. Greedy cluster formation
         for (Booking seed : sortedBookings) {
             if (isAssigned(seed, assignedIds, assignedInstances)) {
                 continue;
@@ -112,13 +109,11 @@ public class GridBasedEmployeeClusterer implements EmployeeClusterer {
                 continue;
             }
 
-            // Retrieve nearby spatial candidates from the 3x3 cell neighborhood
             List<Booking> nearbyCandidates = spatialIndex.findNearby(
                     seed.getPickupLatitude(),
                     seed.getPickupLongitude()
             );
 
-            // Filter unassigned candidates and calculate Haversine distance
             List<CandidateDistance> eligibleCandidates = new ArrayList<>();
             for (Booking candidate : nearbyCandidates) {
                 if (isAssigned(candidate, assignedIds, assignedInstances)) {
@@ -137,11 +132,9 @@ public class GridBasedEmployeeClusterer implements EmployeeClusterer {
                 }
             }
 
-            // Sort candidates in increasing distance order from seed
             eligibleCandidates.sort(Comparator.comparingDouble(CandidateDistance::distance)
                     .thenComparing(c -> c.booking().getId() != null ? c.booking().getId() : 0L));
 
-            // Greedily fill cab up to capacity
             for (CandidateDistance candidate : eligibleCandidates) {
                 if (currentCluster.size() >= cabCapacity) {
                     break;

@@ -39,12 +39,10 @@ public class BookingService {
             throw new AccessDeniedException("Only employees can create bookings");
         }
 
-        // Determine effective idempotency key (header takes precedence, or request body)
         String idempotencyKey = StringUtils.hasText(headerIdempotencyKey)
                 ? headerIdempotencyKey.trim()
                 : (StringUtils.hasText(request.getIdempotencyKey()) ? request.getIdempotencyKey().trim() : null);
 
-        // Idempotency check: if key already exists, return previous response for same user
         if (StringUtils.hasText(idempotencyKey)) {
             Optional<Booking> existingByKey = bookingRepository.findByIdempotencyKey(idempotencyKey);
             if (existingByKey.isPresent()) {
@@ -60,7 +58,6 @@ public class BookingService {
         Office office = officeRepository.findById(request.getOfficeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Office not found with id: " + request.getOfficeId()));
 
-        // Check for existing active booking for same employee, office, and shift
         boolean activeBookingExists = bookingRepository.existsByUserIdAndOfficeIdAndShiftStartTimeAndStatusNot(
                 user.getId(),
                 office.getId(),
@@ -72,7 +69,6 @@ public class BookingService {
             throw new com.smartcab.exception.DuplicateBookingException("Active booking already exists for this employee, office, and shift start time");
         }
 
-        // Snapshot employee's location
         Double pickupLat = request.getPickupLatitude() != null ? request.getPickupLatitude() : user.getLatitude();
         Double pickupLon = request.getPickupLongitude() != null ? request.getPickupLongitude() : user.getLongitude();
 
@@ -109,7 +105,6 @@ public class BookingService {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + id));
 
-        // Employees can only view their own bookings; Admins can view any booking
         if (user.getRole() != Role.ADMIN && !booking.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("You are not authorized to view this booking");
         }
@@ -123,7 +118,6 @@ public class BookingService {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking not found with id: " + id));
 
-        // Employees can only cancel their own bookings; Admins can cancel any booking
         if (user.getRole() != Role.ADMIN && !booking.getUser().getId().equals(user.getId())) {
             throw new AccessDeniedException("You are not authorized to cancel this booking");
         }
