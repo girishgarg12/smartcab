@@ -10,4 +10,5 @@ import java.util.List;
 @Repository
 public interface RouteRepository extends JpaRepository<Route, Long> {
     List<Route> findByStatus(RouteStatus status);
+    List<Route> findByOfficeIdAndShiftStartTimeAndStatus(Long officeId, java.time.LocalDateTime shiftStartTime, RouteStatus status);
 }

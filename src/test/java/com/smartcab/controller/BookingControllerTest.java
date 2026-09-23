@@ -7,6 +7,8 @@ import com.smartcab.entity.Role;
 import com.smartcab.entity.User;
 import com.smartcab.repository.BookingRepository;
 import com.smartcab.repository.OfficeRepository;
+import com.smartcab.repository.RouteRepository;
+import com.smartcab.repository.RouteStopRepository;
 import com.smartcab.repository.UserRepository;
 import com.smartcab.security.JwtUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,12 @@ class BookingControllerTest {
 
     @Autowired
     private WebApplicationContext context;
+
+    @Autowired
+    private RouteStopRepository routeStopRepository;
+
+    @Autowired
+    private RouteRepository routeRepository;
 
     @Autowired
     private BookingRepository bookingRepository;
@@ -66,6 +74,8 @@ class BookingControllerTest {
                 .apply(SecurityMockMvcConfigurers.springSecurity())
                 .build();
 
+        routeStopRepository.deleteAll();
+        routeRepository.deleteAll();
         bookingRepository.deleteAll();
         officeRepository.deleteAll();
         userRepository.deleteAll();
