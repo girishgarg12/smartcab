@@ -1,4 +1,4 @@
-package com.smartcab.smartcab;
+package com.smartcab;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
