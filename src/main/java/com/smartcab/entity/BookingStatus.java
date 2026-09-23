@@ -1,7 +1,7 @@
 package com.smartcab.entity;
 
 public enum BookingStatus {
-    PENDING,
+    BOOKED,
     CONFIRMED,
     IN_TRANSIT,
     COMPLETED,

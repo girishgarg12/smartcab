@@ -32,6 +32,9 @@ class AuthControllerTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private com.smartcab.repository.BookingRepository bookingRepository;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -40,6 +43,7 @@ class AuthControllerTest {
                 .webAppContextSetup(context)
                 .apply(SecurityMockMvcConfigurers.springSecurity())
                 .build();
+        bookingRepository.deleteAll();
         userRepository.deleteAll();
     }
 

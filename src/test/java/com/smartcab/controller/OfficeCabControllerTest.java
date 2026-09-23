@@ -6,6 +6,7 @@ import com.smartcab.dto.OfficeRequest;
 import com.smartcab.entity.CabStatus;
 import com.smartcab.entity.Role;
 import com.smartcab.entity.User;
+import com.smartcab.repository.BookingRepository;
 import com.smartcab.repository.CabRepository;
 import com.smartcab.repository.OfficeRepository;
 import com.smartcab.repository.UserRepository;
@@ -36,6 +37,9 @@ class OfficeCabControllerTest {
     private UserRepository userRepository;
 
     @Autowired
+    private BookingRepository bookingRepository;
+
+    @Autowired
     private OfficeRepository officeRepository;
 
     @Autowired
@@ -60,6 +64,7 @@ class OfficeCabControllerTest {
                 .apply(SecurityMockMvcConfigurers.springSecurity())
                 .build();
 
+        bookingRepository.deleteAll();
         cabRepository.deleteAll();
         officeRepository.deleteAll();
         userRepository.deleteAll();
