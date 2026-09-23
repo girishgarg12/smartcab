@@ -6,7 +6,10 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "route_stops")
+@Table(name = "route_stops", indexes = {
+        @Index(name = "idx_route_stops_route_sequence", columnList = "route_id, sequence ASC"),
+        @Index(name = "idx_route_stops_booking_id", columnList = "booking_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
