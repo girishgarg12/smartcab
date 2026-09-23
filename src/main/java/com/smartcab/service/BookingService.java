@@ -29,6 +29,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final OfficeRepository officeRepository;
+    private final RouteReplanningService routeReplanningService;
 
     @Transactional
     public BookingResponse createBooking(BookingRequest request, String currentUserEmail, String headerIdempotencyKey) {
@@ -129,6 +130,9 @@ public class BookingService {
 
         booking.setStatus(BookingStatus.CANCELLED);
         Booking updated = bookingRepository.save(booking);
+
+        routeReplanningService.replanRouteOnCancellation(updated);
+
         return mapToResponse(updated);
     }
 
