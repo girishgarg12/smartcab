@@ -2,6 +2,7 @@ package com.smartcab.routing.optimizer;
 
 import com.smartcab.entity.Booking;
 import com.smartcab.entity.Office;
+import com.smartcab.routing.constraint.*;
 import com.smartcab.routing.distance.DistanceCalculator;
 import com.smartcab.routing.distance.HaversineDistanceCalculator;
 import lombok.RequiredArgsConstructor;
@@ -33,13 +34,7 @@ import java.util.*;
  * <h3>Complexity Analysis:</h3>
  * <ul>
  *   <li><b>Time Complexity:</b> \(\mathcal{O}(k! \cdot k)\), where \(k\) is the number of passenger pickups in the cab
- *       (\(k \le 6\)).
- *       <ul>
- *         <li>\(k=1 \implies 1\) evaluation</li>
- *         <li>\(k=4 \implies 24\) evaluations</li>
- *         <li>\(k=6 \implies 720\) evaluations</li>
- *       </ul>
- *       For each permutation of length \(k\), leg distances and cumulative travel times are computed in \(\mathcal{O}(k)\).
+ *       (\(k \le 6\)). For each permutation, leg distances, travel durations, and constraint validations are evaluated in \(\mathcal{O}(k)\).
  *   </li>
  *   <li><b>Space Complexity:</b> \(\mathcal{O}(k)\) auxiliary memory for the permutation recursion stack and stop sequencing.</li>
  * </ul>
@@ -51,9 +46,22 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
     public static final int MAX_SUPPORTED_CAB_SIZE = 6;
 
     private final DistanceCalculator distanceCalculator;
+    private final List<RouteConstraint> constraints;
 
     public ExactPickupRouteOptimizer() {
-        this(new HaversineDistanceCalculator());
+        this(new HaversineDistanceCalculator(), List.of(
+                new CapacityConstraint(),
+                new MaxRideTimeConstraint(),
+                new OfficeArrivalConstraint()
+        ));
+    }
+
+    public ExactPickupRouteOptimizer(DistanceCalculator distanceCalculator) {
+        this(distanceCalculator, List.of(
+                new CapacityConstraint(),
+                new MaxRideTimeConstraint(),
+                new OfficeArrivalConstraint()
+        ));
     }
 
     @Override
@@ -77,6 +85,20 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
                             + " passengers per cab. Received: " + k);
         }
 
+        // Fast-path capacity check before generating permutations
+        RouteCandidate initialCheckCandidate = new RouteCandidate(
+                bookings, Collections.emptyList(), MAX_SUPPORTED_CAB_SIZE,
+                office, shiftStartTime, shiftStartTime, maxRideTimeMinutes
+        );
+        for (RouteConstraint constraint : constraints) {
+            if (constraint instanceof CapacityConstraint) {
+                ConstraintValidationResult result = constraint.validate(initialCheckCandidate);
+                if (!result.isValid()) {
+                    return Optional.empty();
+                }
+            }
+        }
+
         // Generate all k! permutations of passenger pickup orders
         List<List<Booking>> permutations = new ArrayList<>();
         generatePermutations(new ArrayList<>(bookings), 0, permutations);
@@ -92,6 +114,7 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
                     permutation,
                     office,
                     officeEta,
+                    shiftStartTime,
                     maxRideTimeMinutes,
                     averageSpeedKmh
             );
@@ -111,11 +134,12 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             List<Booking> permutation,
             Office office,
             LocalDateTime officeEta,
+            LocalDateTime shiftStartTime,
             int maxRideTimeMinutes,
             double averageSpeedKmh) {
 
         int k = permutation.size();
-        double[] legDistancesKm = new double[k]; // distance from stop i to stop i+1 (last leg is to office)
+        double[] legDistancesKm = new double[k];
 
         // 1. Calculate leg distances
         for (int i = 0; i < k - 1; i++) {
@@ -141,7 +165,6 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         }
 
         // 2. Compute travel durations and working-backward pickup ETAs
-        // Travel duration in seconds: (distanceKm / speedKmh) * 3600
         long[] legDurationsSeconds = new long[k];
         for (int i = 0; i < k; i++) {
             double hours = legDistancesKm[i] / averageSpeedKmh;
@@ -149,25 +172,17 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         }
 
         LocalDateTime[] pickupEtas = new LocalDateTime[k];
-
-        // The last stop occurs before office arrival by legDurationsSeconds[k - 1]
         pickupEtas[k - 1] = officeEta.minusSeconds(legDurationsSeconds[k - 1]);
 
         for (int i = k - 2; i >= 0; i--) {
             pickupEtas[i] = pickupEtas[i + 1].minusSeconds(legDurationsSeconds[i]);
         }
 
-        // 3. Verify ride time constraints for every employee
         List<OptimizedStop> stops = new ArrayList<>(k);
         for (int i = 0; i < k; i++) {
             Booking b = permutation.get(i);
             long rideSeconds = Duration.between(pickupEtas[i], officeEta).getSeconds();
             int rideDurationMinutes = (int) Math.ceil(rideSeconds / 60.0);
-
-            // Hard constraint: reject if any employee exceeds max allowed ride time
-            if (rideDurationMinutes > maxRideTimeMinutes) {
-                return CandidateEvaluation.invalid();
-            }
 
             stops.add(new OptimizedStop(
                     b,
@@ -179,8 +194,26 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             ));
         }
 
+        // 3. Validate against all registered route constraints
+        RouteCandidate candidate = new RouteCandidate(
+                permutation,
+                stops,
+                MAX_SUPPORTED_CAB_SIZE,
+                office,
+                officeEta,
+                shiftStartTime,
+                maxRideTimeMinutes
+        );
+
+        for (RouteConstraint constraint : constraints) {
+            ConstraintValidationResult result = constraint.validate(candidate);
+            if (!result.isValid()) {
+                return CandidateEvaluation.invalid(result.failureReason());
+            }
+        }
+
         OptimizedRoute route = new OptimizedRoute(stops, totalDistanceKm, officeEta, office);
-        return new CandidateEvaluation(true, totalDistanceKm, route);
+        return new CandidateEvaluation(true, totalDistanceKm, route, null);
     }
 
     private void generatePermutations(List<Booking> items, int index, List<List<Booking>> result) {
@@ -216,9 +249,9 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         }
     }
 
-    private record CandidateEvaluation(boolean isValid, double totalDistanceKm, OptimizedRoute route) {
-        public static CandidateEvaluation invalid() {
-            return new CandidateEvaluation(false, Double.MAX_VALUE, null);
+    private record CandidateEvaluation(boolean isValid, double totalDistanceKm, OptimizedRoute route, String failureReason) {
+        public static CandidateEvaluation invalid(String reason) {
+            return new CandidateEvaluation(false, Double.MAX_VALUE, null, reason);
         }
     }
 }
