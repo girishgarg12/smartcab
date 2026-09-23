@@ -50,7 +50,11 @@ public class SecurityConfig {
         return (request, response, authException) -> {
             response.setContentType("application/json");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"Authentication required\"}");
+            String json = String.format(
+                    "{\"timestamp\":\"%s\",\"status\":401,\"error\":\"Unauthorized\",\"errorCode\":\"AUTHENTICATION_ERROR\",\"message\":\"Authentication required\",\"path\":\"%s\"}",
+                    java.time.LocalDateTime.now(), request.getRequestURI()
+            );
+            response.getWriter().write(json);
         };
     }
 

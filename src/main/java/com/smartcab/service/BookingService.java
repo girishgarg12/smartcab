@@ -69,7 +69,7 @@ public class BookingService {
         );
 
         if (activeBookingExists) {
-            throw new DuplicateResourceException("Active booking already exists for this employee, office, and shift start time");
+            throw new com.smartcab.exception.DuplicateBookingException("Active booking already exists for this employee, office, and shift start time");
         }
 
         // Snapshot employee's location

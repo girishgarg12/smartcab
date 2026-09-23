@@ -104,7 +104,7 @@ public class RouteReplanningService {
         // 6. Revalidate constraints: if replanning fails constraints, throw exception to trigger rollback
         if (optRoute.isEmpty()) {
             log.error("Route replanning failed for route {}: remaining passengers violate route constraints", route.getId());
-            throw new IllegalStateException(
+            throw new com.smartcab.exception.InvalidRouteException(
                     "Cannot replan route " + route.getId() + " after booking cancellation: remaining passengers violate constraints"
             );
         }

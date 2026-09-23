@@ -263,8 +263,8 @@ class RouteReplanningServiceTest {
         Route route = createRouteWithStops(cab, office, dayShift, List.of(bFar, bNormal));
 
         // When bNormal cancels, bFar alone violates the 60-min max ride time constraint.
-        // Route replanning throws IllegalStateException, rolling back the transaction.
-        assertThrows(IllegalStateException.class, () ->
+        // Route replanning throws InvalidRouteException, rolling back the transaction.
+        assertThrows(com.smartcab.exception.InvalidRouteException.class, () ->
                 bookingService.cancelBooking(bNormal.getId(), uNormal.getEmail())
         );
 

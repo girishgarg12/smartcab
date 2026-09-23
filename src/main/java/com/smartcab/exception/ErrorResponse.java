@@ -6,6 +6,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Standardized JSON error response returned across all API endpoints.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -14,9 +17,11 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ErrorResponse {
 
+    private LocalDateTime timestamp;
     private int status;
     private String error;
+    private String errorCode;
     private String message;
-    private LocalDateTime timestamp;
+    private String path;
     private List<String> errors;
 }
