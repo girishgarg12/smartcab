@@ -8,15 +8,24 @@ import java.util.List;
 /**
  * Represents the complete optimized route plan for a single cab group.
  *
- * @param stops           Ordered list of pickup stops (1-indexed sequence)
- * @param totalDistanceKm Total driving distance across all legs terminating at the office
- * @param officeEta       Estimated arrival time at the destination office
- * @param office          Destination office
+ * @param stops                Ordered list of pickup stops (1-indexed sequence)
+ * @param totalDistanceKm      Total driving distance across all legs terminating at the office
+ * @param officeEta            Estimated arrival time at the destination office
+ * @param office               Destination office
+ * @param requiresEscortGuard  Whether this route requires a security escort guard for night safety
  */
 public record OptimizedRoute(
         List<OptimizedStop> stops,
         double totalDistanceKm,
         LocalDateTime officeEta,
-        Office office
+        Office office,
+        boolean requiresEscortGuard
 ) {
+    public OptimizedRoute(
+            List<OptimizedStop> stops,
+            double totalDistanceKm,
+            LocalDateTime officeEta,
+            Office office) {
+        this(stops, totalDistanceKm, officeEta, office, false);
+    }
 }

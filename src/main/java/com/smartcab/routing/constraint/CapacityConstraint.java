@@ -25,12 +25,15 @@ public class CapacityConstraint implements RouteConstraint {
         }
 
         int passengerCount = candidate.bookings() != null ? candidate.bookings().size() : 0;
+        int guardCount = candidate.hasEscortGuard() ? 1 : 0;
+        int totalOccupants = passengerCount + guardCount;
         int capacity = candidate.cabCapacity();
 
-        if (passengerCount > capacity) {
+        if (totalOccupants > capacity) {
             return ConstraintValidationResult.invalid(
                     NAME,
-                    String.format("Passenger count (%d) exceeds maximum cab capacity (%d)", passengerCount, capacity)
+                    String.format("Total occupants (%d = %d passengers + %d guard) exceeds maximum cab capacity (%d)",
+                            totalOccupants, passengerCount, guardCount, capacity)
             );
         }
 

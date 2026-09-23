@@ -5,7 +5,6 @@ import com.smartcab.entity.Office;
 import com.smartcab.routing.constraint.*;
 import com.smartcab.routing.distance.DistanceCalculator;
 import com.smartcab.routing.distance.HaversineDistanceCalculator;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -21,6 +20,22 @@ import java.util.*;
  * \(6! = 720\). Evaluating 720 candidate routes against travel time and distance constraints executes
  * in less than a millisecond on modern hardware, allowing this component to find the <i>provably optimal</i>
  * pickup sequence for the assigned cab group.
+ * </p>
+ *
+ * <h3>Night Safety & Guard Escalation:</h3>
+ * <p>
+ * During night hours, women employees cannot be the first pickup alone without an escort guard.
+ * The optimizer uses a two-phase strategy:
+ * <ol>
+ *   <li><b>Phase 1 (Unescorted Reordering):</b> Evaluates all pickup permutations without a guard.
+ *       If an alternative valid ordering exists where a female employee is not the first pickup alone,
+ *       that ordering is selected.</li>
+ *   <li><b>Phase 2 (Escort Guard Escalation):</b> If all valid permutations violate the night safety rule,
+ *       the optimizer evaluates routes with a security escort guard (occupying 1 cab seat).
+ *       If the cab has sufficient capacity (\(k + 1 \le \text{cabCapacity}\)), an escorted route is returned.</li>
+ * </ol>
+ * If no safe ordering can be formed and no seat is available for an escort guard, the route is rejected
+ * (returns {@link Optional#empty()}) to prevent silent safety violations.
  * </p>
  *
  * <h3>VRP Scope & Complexity Disclaimer:</h3>
@@ -40,7 +55,6 @@ import java.util.*;
  * </ul>
  */
 @Component
-@RequiredArgsConstructor
 public class ExactPickupRouteOptimizer implements RouteOptimizer {
 
     public static final int MAX_SUPPORTED_CAB_SIZE = 6;
@@ -52,7 +66,8 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         this(new HaversineDistanceCalculator(), List.of(
                 new CapacityConstraint(),
                 new MaxRideTimeConstraint(),
-                new OfficeArrivalConstraint()
+                new OfficeArrivalConstraint(),
+                new NightSafetyConstraint()
         ));
     }
 
@@ -60,8 +75,14 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         this(distanceCalculator, List.of(
                 new CapacityConstraint(),
                 new MaxRideTimeConstraint(),
-                new OfficeArrivalConstraint()
+                new OfficeArrivalConstraint(),
+                new NightSafetyConstraint()
         ));
+    }
+
+    public ExactPickupRouteOptimizer(DistanceCalculator distanceCalculator, List<RouteConstraint> constraints) {
+        this.distanceCalculator = distanceCalculator;
+        this.constraints = constraints;
     }
 
     @Override
@@ -71,6 +92,17 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             LocalDateTime shiftStartTime,
             int maxRideTimeMinutes,
             double averageSpeedKmh) {
+        return optimizeRoute(bookings, office, shiftStartTime, maxRideTimeMinutes, averageSpeedKmh, MAX_SUPPORTED_CAB_SIZE);
+    }
+
+    @Override
+    public Optional<OptimizedRoute> optimizeRoute(
+            List<Booking> bookings,
+            Office office,
+            LocalDateTime shiftStartTime,
+            int maxRideTimeMinutes,
+            double averageSpeedKmh,
+            int cabCapacity) {
 
         validateInputs(bookings, office, shiftStartTime, maxRideTimeMinutes, averageSpeedKmh);
 
@@ -85,29 +117,55 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
                             + " passengers per cab. Received: " + k);
         }
 
-        // Fast-path capacity check before generating permutations
-        RouteCandidate initialCheckCandidate = new RouteCandidate(
-                bookings, Collections.emptyList(), MAX_SUPPORTED_CAB_SIZE,
-                office, shiftStartTime, shiftStartTime, maxRideTimeMinutes
-        );
-        for (RouteConstraint constraint : constraints) {
-            if (constraint instanceof CapacityConstraint) {
-                ConstraintValidationResult result = constraint.validate(initialCheckCandidate);
-                if (!result.isValid()) {
-                    return Optional.empty();
-                }
-            }
+        if (k > cabCapacity) {
+            return Optional.empty();
         }
 
         // Generate all k! permutations of passenger pickup orders
         List<List<Booking>> permutations = new ArrayList<>();
         generatePermutations(new ArrayList<>(bookings), 0, permutations);
 
-        OptimizedRoute bestRoute = null;
-        double minTotalDistance = Double.MAX_VALUE;
-
         // Office arrival must be at or before shiftStartTime
         LocalDateTime officeEta = shiftStartTime;
+
+        // Phase 1: Try finding a valid route WITHOUT an escort guard (hasEscortGuard = false)
+        OptimizedRoute bestRouteWithoutGuard = findBestRoute(
+                permutations, office, officeEta, shiftStartTime,
+                maxRideTimeMinutes, averageSpeedKmh, cabCapacity, false
+        );
+
+        if (bestRouteWithoutGuard != null) {
+            return Optional.of(bestRouteWithoutGuard);
+        }
+
+        // Phase 2: If no safe/valid unescorted ordering exists, try with an escort guard
+        // First check if guard can physically fit (k passengers + 1 guard <= cabCapacity)
+        if (k + 1 <= cabCapacity) {
+            OptimizedRoute bestRouteWithGuard = findBestRoute(
+                    permutations, office, officeEta, shiftStartTime,
+                    maxRideTimeMinutes, averageSpeedKmh, cabCapacity, true
+            );
+            if (bestRouteWithGuard != null) {
+                return Optional.of(bestRouteWithGuard);
+            }
+        }
+
+        // No safe or valid route could be constructed
+        return Optional.empty();
+    }
+
+    private OptimizedRoute findBestRoute(
+            List<List<Booking>> permutations,
+            Office office,
+            LocalDateTime officeEta,
+            LocalDateTime shiftStartTime,
+            int maxRideTimeMinutes,
+            double averageSpeedKmh,
+            int cabCapacity,
+            boolean hasEscortGuard) {
+
+        OptimizedRoute bestRoute = null;
+        double minTotalDistance = Double.MAX_VALUE;
 
         for (List<Booking> permutation : permutations) {
             CandidateEvaluation evaluation = evaluatePermutation(
@@ -116,7 +174,9 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
                     officeEta,
                     shiftStartTime,
                     maxRideTimeMinutes,
-                    averageSpeedKmh
+                    averageSpeedKmh,
+                    cabCapacity,
+                    hasEscortGuard
             );
 
             if (evaluation.isValid()) {
@@ -127,7 +187,7 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             }
         }
 
-        return Optional.ofNullable(bestRoute);
+        return bestRoute;
     }
 
     private CandidateEvaluation evaluatePermutation(
@@ -136,7 +196,9 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             LocalDateTime officeEta,
             LocalDateTime shiftStartTime,
             int maxRideTimeMinutes,
-            double averageSpeedKmh) {
+            double averageSpeedKmh,
+            int cabCapacity,
+            boolean hasEscortGuard) {
 
         int k = permutation.size();
         double[] legDistancesKm = new double[k];
@@ -198,11 +260,12 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
         RouteCandidate candidate = new RouteCandidate(
                 permutation,
                 stops,
-                MAX_SUPPORTED_CAB_SIZE,
+                cabCapacity,
                 office,
                 officeEta,
                 shiftStartTime,
-                maxRideTimeMinutes
+                maxRideTimeMinutes,
+                hasEscortGuard
         );
 
         for (RouteConstraint constraint : constraints) {
@@ -212,7 +275,7 @@ public class ExactPickupRouteOptimizer implements RouteOptimizer {
             }
         }
 
-        OptimizedRoute route = new OptimizedRoute(stops, totalDistanceKm, officeEta, office);
+        OptimizedRoute route = new OptimizedRoute(stops, totalDistanceKm, officeEta, office, hasEscortGuard);
         return new CandidateEvaluation(true, totalDistanceKm, route, null);
     }
 

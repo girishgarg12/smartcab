@@ -18,6 +18,7 @@ import java.util.List;
  * @param officeEta          Estimated arrival timestamp at the office
  * @param shiftStartTime     Required office arrival deadline
  * @param maxRideTimeMinutes Maximum permissible ride duration in minutes
+ * @param hasEscortGuard     Whether an escort guard is present in the cab
  */
 public record RouteCandidate(
         List<Booking> bookings,
@@ -26,6 +27,17 @@ public record RouteCandidate(
         Office office,
         LocalDateTime officeEta,
         LocalDateTime shiftStartTime,
-        int maxRideTimeMinutes
+        int maxRideTimeMinutes,
+        boolean hasEscortGuard
 ) {
+    public RouteCandidate(
+            List<Booking> bookings,
+            List<OptimizedStop> stops,
+            int cabCapacity,
+            Office office,
+            LocalDateTime officeEta,
+            LocalDateTime shiftStartTime,
+            int maxRideTimeMinutes) {
+        this(bookings, stops, cabCapacity, office, officeEta, shiftStartTime, maxRideTimeMinutes, false);
+    }
 }
