@@ -180,4 +180,32 @@ class ExactPickupRouteOptimizerTest {
         assertEquals(1, route.stops().get(0).sequence());
         assertTrue(route.totalDistanceKm() > 0.0);
     }
+
+    @Test
+    void testShortestValidRouteSelected() {
+        // Point 1 (closest to office): 12.9300, 77.6800 (~1.1 km to office at 12.9200)
+        // Point 2 (middle): 12.9500, 77.6800 (~3.3 km to office)
+        // Point 3 (farthest): 12.9700, 77.6800 (~5.5 km to office)
+        // Office is at 12.9200, 77.6800
+        //
+        // Monotonic pickup: B3 -> B2 -> B1 -> Office gives total distance ~ 5.56 km.
+        // Inverted or zigzag pickup orders (e.g. B1 -> B3 -> B2 -> Office) require ~11 km total distance.
+        // The optimizer must evaluate all 3! = 6 permutations and select the shortest valid route [B3, B2, B1].
+        Booking b1 = createBooking(1L, 12.9300, 77.6800);
+        Booking b2 = createBooking(2L, 12.9500, 77.6800);
+        Booking b3 = createBooking(3L, 12.9700, 77.6800);
+
+        Optional<OptimizedRoute> result = optimizer.optimizeRoute(
+                List.of(b1, b2, b3), office, shiftStart, 60, 30.0
+        );
+
+        assertTrue(result.isPresent());
+        OptimizedRoute route = result.get();
+        assertEquals(3, route.stops().size());
+
+        // The shortest route must pick up farthest (B3) first, then B2, then closest (B1)
+        assertEquals(3L, route.stops().get(0).booking().getId());
+        assertEquals(2L, route.stops().get(1).booking().getId());
+        assertEquals(1L, route.stops().get(2).booking().getId());
+    }
 }

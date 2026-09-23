@@ -155,6 +155,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void testLoginWithNonExistentEmail() throws Exception {
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("nonexistent@smartcab.com")
+                .password("somePassword123")
+                .build();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", is("Unauthorized")))
+                .andExpect(jsonPath("$.message", is("Invalid email or password")));
+    }
+
+    @Test
     void testProtectedEndpointWithoutJwt() throws Exception {
         // Any endpoint other than /api/auth/** or /actuator/health is protected
         mockMvc.perform(get("/api/bookings"))
