@@ -10,4 +10,6 @@ import java.util.List;
 @Repository
 public interface CabRepository extends JpaRepository<Cab, Long> {
     List<Cab> findByStatus(CabStatus status);
+    boolean existsByVehicleNumber(String vehicleNumber);
+    java.util.Optional<Cab> findByVehicleNumber(String vehicleNumber);
 }
